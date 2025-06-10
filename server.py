@@ -2,6 +2,9 @@ import random
 from fastmcp import FastMCP
 import csv
 import pandas as pd
+from pymongo import MongoClient
+from db_config import DB_CONFIG
+import mysql.connector
 
 mcp = FastMCP(name="DB Reader")
 
@@ -76,28 +79,22 @@ mcp = FastMCP(name="DB Reader")
 #         return [{"error": str(e)}]
 
 @mcp.tool()
-def query_students_db(sql_query: str) -> list[dict]:
-    """
-    Execute any SQL query on the MySQL database.
-    Example usage:
-      - To get all students older than 20: 'SELECT * FROM students WHERE Age > 20'
-      - To find a student named Alice: 'SELECT * FROM students WHERE Name = "Alice"'
-      - To count students: 'SELECT COUNT(*) FROM students'
-    The input should be a complete SQL query.
-    """
-    import mysql.connector
-    from db_config import DB_CONFIG
+def query_students_db(query: str) -> list[dict]:
+    
     try:
-        conn = mysql.connector.connect(**DB_CONFIG)
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute(sql_query)
+        conn = mysql.connector.connect(
+            host=DB_CONFIG['host'],
+            port=DB_CONFIG['port'],
+            user=DB_CONFIG['user'],
+            password=DB_CONFIG['password'],
+            database=DB_CONFIG['database']
+        )
+        cursor = conn.cursor()
+        cursor.execute(query)  # Execute SQL query
         results = cursor.fetchall()
-        cursor.close()
-        print("Connected to database:", cursor.fetchone())
         conn.close()
-        return results
+        return [dict(zip([column[0] for column in cursor.description], row)) for row in results]
     except Exception as e:
-        print("Connection failed:", e)
         return [{"error": str(e)}]
 
 if __name__ == "__main__":
