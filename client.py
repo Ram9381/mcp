@@ -12,15 +12,7 @@ mcp_client = Client("server.py")
 gemini_client = genai.Client()
 
 # Initialize MySQL connection
-DB_CONFIG = {
-    'host': 'localhost',
-    'port': 3306,
-    'user': 'root',
-    'password': 'root',
-    'database':  'abhidb'
 
-
-}
 
 async def main():
     while True:
