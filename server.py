@@ -1,16 +1,13 @@
 import random
 from fastmcp import FastMCP
-import csv
-import pandas as pd
-from pymongo import MongoClient
-from db_config import DB_CONFIG
 import mysql.connector
-
+from db_config import DB_CONFIG
 mcp = FastMCP(name="DB Reader")
 
 
-def query_students_db(query: str, values_only: bool = False) -> list:
-    """Query the students database using a SQL query."""
+@mcp.tool()
+def query_database(query: str, values_only: bool = False) -> list:
+    """Query the database (students or teachers) using a SQL query."""
     try:
         conn = mysql.connector.connect(
             host=DB_CONFIG['host'],
@@ -20,13 +17,18 @@ def query_students_db(query: str, values_only: bool = False) -> list:
             database=DB_CONFIG['database']
         )
         cursor = conn.cursor()
-        cursor.execute("SET SQL_SAFE_UPDATES = 0;")  # Disable safe update mode
         cursor.execute(query)  # Execute SQL query
+        if query.strip().lower().startswith("update"):
+            conn.commit()  # Commit changes for UPDATE queries
+            return [{"success": True, "message": "Update successful"}]
         results = cursor.fetchall()
         conn.close()
+        if values_only:
+            return [row[0] for row in results]  # Return only the first column's values
         return [dict(zip([column[0] for column in cursor.description], row)) for row in results]
     except Exception as e:
         return [{"error": str(e)}]
+
 
 if __name__ == "__main__":
     mcp.run()
