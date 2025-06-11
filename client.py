@@ -52,7 +52,7 @@ async def main():
 
         # Add the user's input to the context window
         context_window.append({"role": "user", "content": user_prompt})
-        context_window = context_window[-5:]  # Limit context window to the last 5 messages
+        context_window = context_window[-8:]  # Limit context window to the last 8 messages
 
         while True:  # Inner loop to handle clarifications
             # Send prompt to Gemini for SQL query generation
