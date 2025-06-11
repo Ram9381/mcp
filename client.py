@@ -5,7 +5,7 @@ from fastmcp import Client
 from google import genai
 import asyncio
 import mysql.connector
-from server import query_students_db
+from server import query_students
 
 # Initialize MCP client (adjust URL if needed)
 mcp_client = Client("server.py")
@@ -33,7 +33,7 @@ async def main():
         sql_query = response.text.strip()  # Ensure no extra formatting
         sql_query = sql_query.replace("```sql", "").replace("```", "").strip()  # Remove formatting artifacts
         print(sql_query)
-        results = query_students_db(sql_query)
+        results = query_students(sql_query)
         print(results)
         
 # Example usage of the function
