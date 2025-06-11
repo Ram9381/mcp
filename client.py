@@ -23,7 +23,7 @@ async def main():
         # Send prompt to Gemini for SQL query generation
         response = await gemini_client.aio.models.generate_content(
             model="gemini-2.0-flash",
-            contents=f"Generate a valid SQL query for the following request: '{user_prompt}'. Return only the SQL query without any formatting, explanation, or additional text.",
+            contents=f"Generate a valid SQL query for the following request: '{user_prompt}'. Return only the SQL query as plain text without any formatting, explanation, or additional text.",
             config=genai.types.GenerateContentConfig(
                 temperature=0,
                 tools=[],
@@ -31,6 +31,8 @@ async def main():
         )
         # Extract the SQL query string from the response object
         sql_query = response.text.strip()  # Ensure no extra formatting
+        sql_query = sql_query.replace("```sql", "").replace("```", "").strip()  # Remove formatting artifacts
+        print(sql_query)
         results = query_students_db(sql_query)
         print(results)
         

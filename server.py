@@ -9,7 +9,7 @@ import mysql.connector
 mcp = FastMCP(name="DB Reader")
 
 
-def query_students_db(query: str) -> list[dict]:
+def query_students_db(query: str, values_only: bool = False) -> list:
     """Query the students database using a SQL query."""
     try:
         conn = mysql.connector.connect(
@@ -20,6 +20,7 @@ def query_students_db(query: str) -> list[dict]:
             database=DB_CONFIG['database']
         )
         cursor = conn.cursor()
+        cursor.execute("SET SQL_SAFE_UPDATES = 0;")  # Disable safe update mode
         cursor.execute(query)  # Execute SQL query
         results = cursor.fetchall()
         conn.close()
