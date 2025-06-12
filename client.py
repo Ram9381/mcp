@@ -5,7 +5,8 @@ from fastmcp import Client
 from google import genai
 import asyncio
 import mysql.connector
-from server import query_database
+from server import query_database , get_weather
+import ast  # Import the ast module for safe literal evaluation
 
 # Initialize MCP client (adjust URL if needed)
 mcp_client = Client("server.py")
@@ -40,10 +41,46 @@ def schemas_of_db():
         }
     }
     return schemas
+async def invoke_tool(response_text):
+    """Second agent to invoke the appropriate MCP tool based on the response."""
+    second_agent_instruction = f"""
+    You are a tool invocation assistant.
+    Based on the following response: '{response_text}', invoke the appropriate MCP tool.
+    Use the `get_weather` tool for weather-related queries and the `query_database` tool for database-related queries.
+    return the output from the tool.
+    """
+
+    # Send the response to the second Gemini agent
+    second_response = await gemini_client.aio.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=second_agent_instruction,
+        config=genai.types.GenerateContentConfig(
+            temperature=0,
+            tools=[get_weather, query_database],  # Pass callable objects for tools
+        ),
+    )
+
+    # Extract the tool invocation from the second agent's response
+    tool_invocation = second_response.text.strip()
+    print(f"Second Agent Response: {tool_invocation}")
+
+    # Parse the tool invocation and invoke the appropriate MCP tool
 async def main():
     # Fetch schemas dynamically from the schemas_of_db function
     schemas = schemas_of_db()
     context_window = []  # Initialize the context window to track conversation history
+    system_instruction = f"""
+    You are a helpful assistant.
+    You can answer questions about student and teacher data from a database.
+    Use the following database schemas as context for SQL queries, and generate valid SQL for the `query_database` tool: {schemas}.
+    You can also provide weather information for any city using the `get_weather` tool.
+    If a database request is ambiguous, ask the user for clarification by providing options. Start the clarification question with 'Clarification Question:'.
+    Be concise in your responses.
+    If you are answering a question about the weather, the response should be in the format:
+    Weather in city: weather description, temperature: temperature°C, humidity: humidity%, wind speed: wind_speed m/s.
+    If you are answering a question about the database, the response should be in the format:
+    Database Query Result: result, where result is the SQL query.
+    """
 
     while True:
         user_prompt = input("Ask me anything (or type 'exit' to quit): ")
@@ -55,18 +92,19 @@ async def main():
         context_window = context_window[-8:]  # Limit context window to the last 8 messages
 
         while True:  # Inner loop to handle clarifications
-            # Send prompt to Gemini for SQL query generation
+            # Send prompt to the first Gemini agent for response generation
             response = await gemini_client.aio.models.generate_content(
                 model="gemini-2.0-flash",
-                contents=f"Based on the following conversation context: {context_window}. Generate a valid SQL query for the following request: '{user_prompt}'. Use the following schemas and relationships as context: {schemas}. If the request is ambiguous, ask the user for clarification by providing options. Start the clarification question with 'Clarification Question:'. Return only the SQL query or the clarification question as plain text without any formatting, explanation, or additional text.",
+                contents=system_instruction + "\n" + "\n".join(
+                    f"{msg['role']}: {msg['content']}" for msg in context_window
+                ),
                 config=genai.types.GenerateContentConfig(
                     temperature=0,
-                    tools=[],
+                    tools=[],  # No tools for the first agent
                 ),
             )
-            # Extract the response from the Gemini client
-            response_text = response.text.strip()  # Ensure no extra formatting
-            response_text = response_text.replace("```sql", "").replace("```", "").strip()  # Remove formatting artifacts
+            # Extract the response from the first Gemini agent
+            response_text = response.text.strip()
 
             # Check if the response is a clarification question
             if response_text.startswith("Clarification Question:"):
@@ -79,11 +117,9 @@ async def main():
             # Add the Gemini response to the context window
             context_window.append({"role": "assistant", "content": response_text})
 
-            # Execute the SQL query and display results
-            print(response_text)
-            results = query_database(response_text)
-            print(results)
-            break  # Exit the inner loop after successful query execution
+            # Pass the response to the second agent for tool invocation
+            await invoke_tool(response_text)
+            break  # Exit the inner loop after invoking the tool
 
 # Example usage of the function
 
