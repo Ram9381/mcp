@@ -54,54 +54,51 @@ async def main():
         context_window.append({"role": "user", "content": user_prompt})
         context_window = context_window[-8:]  # Limit context window to the last 8 messages
 
-        # Weather API detection
-        if any(word in user_prompt.lower() for word in ["weather", "temperature", "forecast", "rain", "humidity"]):
-            # Extract city or location from user_prompt if possible, else use a default
-            import re
-            match = re.search(r"(?:weather|temperature|forecast|rain|humidity)(?:\s*(?:of|in|at))?\s*([a-zA-Z\s]+)", user_prompt.lower())
-            location = match.group(1).strip() if match else None
-            if not location or location in ["", "your city"]:
-                # Try to get the last word if user said "weather Hyderabad"
-                tokens = user_prompt.strip().split()
-                if len(tokens) > 1:
-                    location = tokens[-1]
-                else:
-                    location = "Hyderabad"  # fallback default
-            weather_result = get_weather(location)
-            print(f"Weather for {location}:")
-            print(weather_result)
-            continue
-
-        while True:  # Inner loop to handle clarifications
-            # Send prompt to Gemini for SQL query generation
+        while True:  # Inner loop to handle clarifications and tool selection
+            # Instruct Gemini to decide which tool (SQL or weather) to use and return a tool call instruction
             response = await gemini_client.aio.models.generate_content(
                 model="gemini-2.0-flash",
-                contents=f"Based on the following conversation context: {context_window}. Generate a valid SQL query for the following request: '{user_prompt}'. Use the following schemas and relationships as context: {schemas}. If the request is ambiguous, ask the user for clarification by providing options. Start the clarification question with 'Clarification Question:'. Return only the SQL query or the clarification question as plain text without any formatting, explanation, or additional text.",
+                contents=(
+                    f"Based on the following conversation context: {context_window}. "
+                    f"Decide which tool to use for the following user request: '{user_prompt}'. "
+                    f"You have access to two tools: "
+                    f"1. SQL database (schemas: {schemas}) for student/teacher/course queries. "
+                    f"2. Weather API (call as: WEATHER(location)) for weather-related queries. "
+                    f"If the request is ambiguous, ask the user for clarification by providing options. "
+                    f"Start the clarification question with 'Clarification Question:'. "
+                    f"If you know which tool to use, respond ONLY with either a valid SQL query or WEATHER(location), "
+                    f"with no extra explanation or formatting."
+                ),
                 config=genai.types.GenerateContentConfig(
                     temperature=0,
                     tools=[],
                 ),
             )
-            # Extract the response from the Gemini client
-            response_text = response.text.strip()  # Ensure no extra formatting
-            response_text = response_text.replace("```sql", "").replace("```", "").strip()  # Remove formatting artifacts
+            response_text = response.text.strip()
+            response_text = response_text.replace("```sql", "").replace("```", "").strip()
 
             # Check if the response is a clarification question
             if response_text.startswith("Clarification Question:"):
                 print(f"{response_text}")
                 clarification = input("Your response: ")
                 context_window.append({"role": "user", "content": clarification})
-                user_prompt = clarification  # Update the user prompt with the clarification
-                continue  # Retry with the clarification added to the context
+                user_prompt = clarification
+                continue
 
             # Add the Gemini response to the context window
             context_window.append({"role": "assistant", "content": response_text})
 
-            # Execute the SQL query and display results
-            print(response_text)
-            results = query_database(response_text)
-            print(results)
-            break  # Exit the inner loop after successful query execution
+            # Tool invocation logic
+            if response_text.upper().startswith("WEATHER(") and response_text.endswith(")"):
+                location = response_text[len("WEATHER("):-1].strip().strip("'\"")
+                weather_result = get_weather(location)
+                print(f"Weather for {location}:")
+                print(weather_result)
+            else:
+                print(response_text)
+                results = query_database(response_text)
+                print(results)
+            break  # Exit the inner loop after successful tool invocation
 
 # Example usage of the function
 
