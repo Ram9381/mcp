@@ -4,5 +4,6 @@ DB_CONFIG = {
     'port': 3306,         # MySQL server port
     'user': 'root',       # MySQL username
     'password': 'root',  # MySQL password
-    'database': 'abhidb'  # MySQL database name
+    'database': 'mcpdb',
+    'auth_plugin':'mysql_native_password'  # MySQL database name
 }
