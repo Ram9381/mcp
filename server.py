@@ -4,45 +4,45 @@ import mysql.connector
 from db_config import DB_CONFIG
 import requests  # For making API requests
 
-mcp = FastMCP(name="Database_Reader")
+mcp = FastMCP(name="Database_Reader", stateless_http=True)
 
-@mcp.tool()
+@mcp.tool('/print_hello')
 def print_hello() -> str:
     """Prints 'Hello, World!'"""
     return "Hello, World!"
-@mcp.tool()
+
+@mcp.tool('/query_database')
 def query_database(query: str, values_only: bool = False) -> list:
     """Execute a SQL SELECT query on the 'products', 'orders', or 'order_items' tables.
     Supported Tables and Schemas:
     1. products
-       - product_id (INT, primary key)
-       - name (VARCHAR)
-       - price (DECIMAL)
-       - stock_quantity (INT)
+    - product_id (INT, primary key)
+    - name (VARCHAR)
+    - price (DECIMAL)
+    - stock_quantity (INT)
     2. orders
-       - order_id (INT, primary key)
-       - customer_name (VARCHAR)
-       - total_amount (DECIMAL)
+    - order_id (INT, primary key)
+    - customer_name (VARCHAR)
+    - total_amount (DECIMAL)
     3. order_items
-       - item_id (INT, primary key)
-       - order_id (INT, foreign key to orders.order_id)
-       - product_id (INT, foreign key to products.product_id)
-       - quantity (INT)
-       - item_price (DECIMAL)
-     Usage:
+    - item_id (INT, primary key)
+    - order_id (INT, foreign key to orders.order_id)
+    - product_id (INT, foreign key to products.product_id)
+    - quantity (INT)
+    - item_price (DECIMAL)
+    Usage:
     - Use valid column names as per the schemas above.
     - You may use JOINs between the supported tables.
     Parameters:
     - query (str): A valid SQL SELECT query string.
     - values_only (bool): If True, returns list of row values only.
-                          If False (default), returns list of dicts with column names.
+    If False (default), returns list of dicts with column names.
     Examples:
     - query="SELECT * FROM orders WHERE total_amount > 10000"
     - query="SELECT name, price FROM products WHERE stock_quantity < 20"
     - query="SELECT o.customer_name, p.name, oi.quantity FROM orders o JOIN order_items oi ON o.order_id = oi.order_id JOIN products p ON p.product_id = oi.product_id"
     """
     try:
-
         conn = mysql.connector.connect(
             host=DB_CONFIG['host'],
             port=DB_CONFIG['port'],
@@ -52,41 +52,36 @@ def query_database(query: str, values_only: bool = False) -> list:
             auth_plugin=DB_CONFIG['auth_plugin']
         )
         cursor = conn.cursor()
-        cursor.execute(query)  
+        cursor.execute(query)
         if query.strip().lower().startswith("update"):
-            conn.commit() 
+            conn.commit()
             return [{"success": True, "message": "Update successful"}]
         results = cursor.fetchall()
         conn.close()
         if values_only:
-            return [row[0] for row in results]  
+            return [row[0] for row in results]
         return [dict(zip([column[0] for column in cursor.description], row)) for row in results]
     except Exception as e:
         return [{"error": str(e)}]
 
-
-@mcp.tool()
+@mcp.tool('/get_weather')
 def get_weather(city: str) -> dict:
     """Fetch weather data for a given city using a weather API.
-    
-    Use this tool when the user asks about:
+        Use this tool when the user asks about:
     - Current weather conditions in any city
     - Temperature, humidity, wind speed for a location
     - Weather descriptions or forecasts
     - Climate information for travel or planning
-    
+
     Args:
         city: Name of the city to get weather information for."""
     try:
-        
         api_key = "e435336b0503ce3004bff40375003377"
         base_url = "http://api.openweathermap.org/data/2.5/weather"
         params = {"q": city, "appid": api_key, "units": "metric"}
-
         response = requests.get(base_url, params=params)
-        response.raise_for_status()  
+        response.raise_for_status()
         weather_data = response.json()
-
         return {
             "city": weather_data.get("name"),
             "temperature": weather_data["main"].get("temp"),
@@ -97,6 +92,9 @@ def get_weather(city: str) -> dict:
     except Exception as e:
         return {"error": str(e)}
 
-
 if __name__ == "__main__":
-    mcp.run()
+# By default, FastMCP runs at http://localhost:8000
+# To specify a different host/port, use: mcp.run(transport="http", host="0.0.0.0", port=9000)
+# NOTE: Clients must send Accept: application/json, text/event-stream and X-Session-Id headers in requests.
+    mcp.run(transport="streamable-http", host="0.0.0.0", port=8000)
+    #mcp.run(transport="streamable-http", host="0.0.0.0", port=8000)
